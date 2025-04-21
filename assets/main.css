@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  /* Estilos base para el cuerpo y el html */
+  @apply bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 font-sans antialiased;
+  /* Asegura que el layout ocupe toda la altura */
+  @apply min-h-screen;
+}
+
+/* Estilos opcionales para mejorar la barra de scroll en modo oscuro */
+html.dark ::-webkit-scrollbar {
+  width: 10px;
+}
+html.dark ::-webkit-scrollbar-track {
+  background: theme('colors.zinc.800'); 
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: theme('colors.zinc.600');
+  border-radius: 5px;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: theme('colors.zinc.500'); 
+} 
