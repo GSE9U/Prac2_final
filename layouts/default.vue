@@ -3,7 +3,7 @@
     <header class="bg-primary-600 text-white shadow">
       <div class="container mx-auto flex items-center justify-between py-4 px-2">
         <NuxtLink to="/" class="flex items-center gap-2">
-          <img src="/airbnb-logo.svg" alt="Airbnb Logo" class="w-8 h-8" />
+          <img src="/airbnb.png" alt="Airbnb FinderLogo" class="w-8 h-8" />
           <span class="text-xl font-bold">Airbnb Finder</span>
         </NuxtLink>
 

@@ -1,186 +1,172 @@
 <script setup lang="ts">
-// import { useListingsStore } from '../stores/listings.ts' // <-- Comentado temporalmente
 import { PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import ImportAirbnb from '../components/ImportAirbnb.vue'
+import { useListingsStore } from '~/stores/useListingsStore'
+import { useBookingsStore } from '~/stores/useBookingsStore'
+import { doc, deleteDoc, collection, getDocs } from 'firebase/firestore'
+import { db } from '../services/Fireinit'
 
-// const store = useListingsStore() // <-- Comentado temporalmente
+const store = useListingsStore()
+const bookingsStore = useBookingsStore()
 
-// Datos de prueba para mostrar en la interfaz de administración
-const items = ref([
-  {
-    id: '1',
-    name: 'Apartamento con vistas al mar',
-    city: 'Barcelona',
-    price: 85,
-    img: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3',
-    description: 'Bonito apartamento con vistas panorámicas al mar Mediterráneo',
-    capacity: 4,
-    bedrooms: 2,
-    bathrooms: 1,
-    rating: 4.8,
-    reviews: 45
-  },
-  {
-    id: '2',
-    name: 'Loft moderno en el centro',
-    city: 'Madrid',
-    price: 75,
-    img: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?ixlib=rb-4.0.3',
-    description: 'Espacioso loft en pleno centro de Madrid con todas las comodidades',
-    capacity: 2,
-    bedrooms: 1,
-    bathrooms: 1,
-    rating: 4.5,
-    reviews: 32
-  },
-  {
-    id: '3',
-    name: 'Villa con piscina',
-    city: 'Valencia',
-    price: 120,
-    img: 'https://images.unsplash.com/photo-1493809842364-78817add7ffb?ixlib=rb-4.0.3',
-    description: 'Villa exclusiva con piscina privada y jardín a 5 minutos de la playa',
-    capacity: 6,
-    bedrooms: 3,
-    bathrooms: 2,
-    rating: 4.9,
-    reviews: 67
-  },
-  {
-    id: '4',
-    name: 'Apartamento acogedor',
-    city: 'Sevilla',
-    price: 65,
-    img: 'https://images.unsplash.com/photo-1489171078254-c3365d6e359f?ixlib=rb-4.0.3',
-    description: 'Acogedor apartamento en el barrio de Santa Cruz, a pocos pasos de la Giralda',
-    capacity: 3,
-    bedrooms: 1,
-    bathrooms: 1,
-    rating: 4.7,
-    reviews: 28
-  }
-])
+onMounted(() => {
+  store.subscribe()
+  items.value.forEach(l => bookingsStore.subscribe(l.id))
+})
 
-// Vista activa y modal de edición
-const activeView = ref('table') // 'table' o 'listing'
+const items = computed(() => store.docsArray)
+
+const activeView = ref('table')
 const isEditModalOpen = ref(false)
 const currentEditItem = ref(null)
+const showPasswordFailModal = ref(false)
 
-// Formulario para editar/crear alojamiento
 const editForm = reactive({
   id: '',
-  name: '',
+  title: '',
   city: '',
   price: 0,
-  img: '',
+  image: '',
   description: '',
   capacity: 1,
   bedrooms: 1,
   bathrooms: 1,
   rating: 5,
-  reviews: 0
+  reviews: 0,
+  reserved: false,
+  reservedDate: null
 })
 
-// Para añadir un nuevo alojamiento
 function openNewListingForm() {
   editForm.id = ''
-  editForm.name = ''
+  editForm.title = ''
   editForm.city = ''
   editForm.price = 0
-  editForm.img = ''
+  editForm.image = ''
   editForm.description = ''
   editForm.capacity = 1
   editForm.bedrooms = 1
   editForm.bathrooms = 1
   editForm.rating = 5
   editForm.reviews = 0
+  editForm.reserved = false
+  editForm.reservedDate = null
   isEditModalOpen.value = true
 }
 
-// Para editar un alojamiento existente
 function edit(id) {
   const item = items.value.find(item => item.id === id)
   if (item) {
     currentEditItem.value = item
-    // Copiar los valores al formulario
     editForm.id = item.id
-    editForm.name = item.name
+    editForm.title = item.title || item.name || ''
     editForm.city = item.city
     editForm.price = item.price
-    editForm.img = item.img
+    editForm.image = item.image || item.img || ''
     editForm.description = item.description || ''
     editForm.capacity = item.capacity || 1
     editForm.bedrooms = item.bedrooms || 1
     editForm.bathrooms = item.bathrooms || 1
     editForm.rating = item.rating || 5
     editForm.reviews = item.reviews || 0
+    editForm.reserved = item.reserved || false
+    editForm.reservedDate = item.reservedDate || null
     isEditModalOpen.value = true
   }
 }
 
-// Para eliminar un alojamiento
-function del(id) {
+async function del(id) {
   if (confirm('¿Estás seguro de que deseas eliminar este alojamiento?')) {
-    items.value = items.value.filter(item => item.id !== id)
+    await deleteDoc(doc(db, 'listings', id));
+    await store.subscribe(); // Refresca la lista
   }
 }
 
-// Para guardar los cambios
-function saveChanges() {
-  if (editForm.id) {
-    // Editar existente
-    const index = items.value.findIndex(item => item.id === editForm.id)
-    if (index !== -1) {
-      items.value[index] = {
-        ...items.value[index],
-        name: editForm.name,
-        city: editForm.city,
-        price: Number(editForm.price),
-        img: editForm.img,
-        description: editForm.description,
-        capacity: Number(editForm.capacity),
-        bedrooms: Number(editForm.bedrooms),
-        bathrooms: Number(editForm.bathrooms),
-        rating: Number(editForm.rating),
-        reviews: Number(editForm.reviews)
-      }
+function formatDate(date) {
+  if (!date) return ''
+  if (typeof date === 'string') return date
+  if (date.toDate) return date.toDate().toLocaleDateString()
+  return new Date(date).toLocaleDateString()
+}
+
+async function toggleReserved(listing) {
+  await store.toggleReserved(listing.id, !listing.reserved)
+}
+
+async function borrarTodosAlojamientos() {
+  if (confirm('¿Seguro que quieres borrar TODOS los alojamientos? Esta acción no se puede deshacer.')) {
+    const querySnapshot = await getDocs(collection(db, 'listings'));
+    const batch = [];
+    querySnapshot.forEach((docu) => {
+      batch.push(deleteDoc(doc(db, 'listings', docu.id)));
+    });
+    await Promise.all(batch);
+    await store.fetchListings(); // Refresca el store
+    alert('¡Todos los alojamientos han sido borrados!');
+  }
+}
+
+async function saveChanges() {
+  if (!editForm.id) {
+    // NUEVO alojamiento: pedir contraseña
+    const password = prompt('Introduce la contraseña para subir el alojamiento:');
+    if (password !== 'autorizadoP3') {
+      showPasswordFailModal.value = true;
+      return;
     }
-  } else {
-    // Crear nuevo
-    const newId = (Math.max(...items.value.map(item => parseInt(item.id)), 0) + 1).toString()
-    items.value.push({
-      id: newId,
-      name: editForm.name,
+  }
+  if (editForm.id) {
+    await store.updateListing(editForm.id, {
+      title: editForm.title,
       city: editForm.city,
       price: Number(editForm.price),
-      img: editForm.img,
+      image: editForm.image,
       description: editForm.description,
       capacity: Number(editForm.capacity),
       bedrooms: Number(editForm.bedrooms),
       bathrooms: Number(editForm.bathrooms),
       rating: Number(editForm.rating),
-      reviews: Number(editForm.reviews)
+      reviews: Number(editForm.reviews),
+      reserved: !!editForm.reserved,
+      reservedDate: editForm.reserved ? (editForm.reservedDate || new Date().toISOString()) : null
+    })
+  } else {
+    await store.addListing({
+      title: editForm.title,
+      city: editForm.city,
+      price: Number(editForm.price),
+      image: editForm.image,
+      description: editForm.description,
+      capacity: Number(editForm.capacity),
+      bedrooms: Number(editForm.bedrooms),
+      bathrooms: Number(editForm.bathrooms),
+      rating: Number(editForm.rating),
+      reviews: Number(editForm.reviews),
+      reserved: !!editForm.reserved,
+      reservedDate: editForm.reserved ? new Date().toISOString() : null
     })
   }
   isEditModalOpen.value = false
+  await store.subscribe(); // Refresca la lista tras añadir/editar
 }
 
-// Para cerrar el modal sin guardar
 function cancelEdit() {
   isEditModalOpen.value = false
 }
 
 function addImportedListing(listing) {
-  // Añadir el listado importado a la lista de alojamientos
-  const newId = (Math.max(...items.value.map(item => parseInt(item.id)), 0) + 1).toString()
-  
-  items.value.push({
-    id: newId,
-    name: listing.name,
+  // Siempre pide contraseña antes de importar
+  const password = prompt('Introduce la contraseña para subir el alojamiento:');
+  if (password !== 'autorizadoP3') {
+    showPasswordFailModal.value = true;
+    return;
+  }
+  store.addListing({
+    title: listing.name,
     city: listing.location || 'Sin especificar',
     price: listing.price || 0,
-    img: listing.image || 'https://placehold.co/600x400?text=Sin+Imagen',
+    image: listing.image || 'https://placehold.co/600x400?text=Sin+Imagen',
     description: listing.description || '',
     capacity: listing.capacity || 1,
     bedrooms: listing.bedrooms || 1,
@@ -188,9 +174,13 @@ function addImportedListing(listing) {
     rating: listing.rating || 5,
     reviews: listing.reviews || 0
   })
-  
-  // Cambiar a la vista de tabla después de importar
   activeView.value = 'table'
+  store.subscribe(); // Refresca la lista
+}
+
+function getActiveBookings(listingId) {
+  const today = new Date().toISOString().slice(0, 10)
+  return bookingsStore.bookings.filter(b => b.listingId === listingId && b.endDate >= today)
 }
 </script>
 
@@ -205,6 +195,12 @@ function addImportedListing(listing) {
           class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#FF5A5F] hover:bg-[#FF3A3F] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5A5F]"
         >
           Añadir alojamiento
+        </button>
+        <button
+          @click="borrarTodosAlojamientos"
+          class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+        >
+          Borrar TODOS
         </button>
         <router-link 
           to="/import"
@@ -225,6 +221,7 @@ function addImportedListing(listing) {
             <th scope="col" class="px-6 py-3">Ciudad</th>
             <th scope="col" class="px-6 py-3">Precio (€)</th>
             <th scope="col" class="px-6 py-3">Valoración</th>
+            <th scope="col" class="px-6 py-3">Reservado</th>
             <th scope="col" class="px-6 py-3 text-right">Acciones</th>
           </tr>
         </thead>
@@ -232,10 +229,10 @@ function addImportedListing(listing) {
           <tr v-for="l in items" :key="l.id" 
               class="bg-white border-b dark:bg-zinc-800 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-600">
             <td class="px-6 py-4">
-              <img :src="l.img" :alt="l.name" class="h-12 w-16 object-cover rounded-md" />
+              <img :src="l.image || 'https://placehold.co/120x80?text=Sin+Imagen'" :alt="l.title" class="h-12 w-16 object-cover rounded-md" />
             </td>
             <th scope="row" class="px-6 py-4 font-medium text-zinc-900 dark:text-white whitespace-nowrap">
-              {{ l.name }}
+              {{ l.title }}
             </th>
             <td class="px-6 py-4">{{ l.city }}</td>
             <td class="px-6 py-4">{{ l.price }}€</td>
@@ -245,6 +242,15 @@ function addImportedListing(listing) {
                 <span>{{ l.rating || "N/A" }}</span>
                 <span class="text-zinc-400 text-xs ml-1">({{ l.reviews || 0 }})</span>
               </div>
+            </td>
+            <td class="px-6 py-4">
+              <span v-if="getActiveBookings(l.id).length > 0" class="bg-red-500 text-white text-xs px-2 py-1 rounded">Reservado</span>
+              <span v-else class="bg-green-500 text-white text-xs px-2 py-1 rounded">Disponible</span>
+              <ul v-if="getActiveBookings(l.id).length > 0" class="text-xs text-zinc-400 mt-1">
+                <li v-for="b in getActiveBookings(l.id)" :key="b.id">
+                  {{ formatDate(b.startDate) }} → {{ formatDate(b.endDate) }}
+                </li>
+              </ul>
             </td>
             <!-- Acciones: Editar y Eliminar -->
             <td class="px-6 py-4 text-right space-x-3 whitespace-nowrap">
@@ -266,7 +272,7 @@ function addImportedListing(listing) {
           </tr>
           <!-- Mensaje si no hay listings -->
           <tr v-if="!items.length">
-            <td colspan="6" class="px-6 py-4 text-center text-zinc-500 dark:text-zinc-400">
+            <td colspan="7" class="px-6 py-4 text-center text-zinc-500 dark:text-zinc-400">
               No hay alojamientos disponibles.
             </td>
           </tr>
@@ -290,11 +296,11 @@ function addImportedListing(listing) {
           <form @submit.prevent="saveChanges" class="space-y-4">
             <!-- Nombre -->
             <div>
-              <label for="name" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Nombre</label>
+              <label for="title" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Nombre</label>
               <input 
                 type="text" 
-                id="name" 
-                v-model="editForm.name" 
+                id="title" 
+                v-model="editForm.title" 
                 class="mt-1 block w-full border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white rounded-md shadow-sm focus:ring-[#FF5A5F] focus:border-[#FF5A5F]" 
                 required
               />
@@ -325,15 +331,15 @@ function addImportedListing(listing) {
             
             <!-- URL de la imagen -->
             <div>
-              <label for="img" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">URL de imagen</label>
+              <label for="image" class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">URL de imagen</label>
               <input 
                 type="url" 
-                id="img" 
-                v-model="editForm.img" 
+                id="image" 
+                v-model="editForm.image" 
                 class="mt-1 block w-full border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white rounded-md shadow-sm focus:ring-[#FF5A5F] focus:border-[#FF5A5F]" 
               />
-              <div v-if="editForm.img" class="mt-2">
-                <img :src="editForm.img" alt="Vista previa" class="h-24 w-32 object-cover rounded-md" />
+              <div v-if="editForm.image" class="mt-2">
+                <img :src="editForm.image" alt="Vista previa" class="h-24 w-32 object-cover rounded-md" />
               </div>
             </div>
             
@@ -421,6 +427,15 @@ function addImportedListing(listing) {
               </div>
             </div>
             
+            <!-- En el modal de edición, dentro del formulario -->
+            <div>
+              <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Reservado</label>
+              <input type="checkbox" v-model="editForm.reserved" />
+              <span v-if="editForm.reserved && editForm.reservedDate" class="text-xs text-zinc-400 ml-2">
+                (Reservado el {{ formatDate(editForm.reservedDate) }})
+              </span>
+            </div>
+            
             <!-- Botones -->
             <div class="flex justify-end space-x-3 pt-4">
               <button 
@@ -439,6 +454,28 @@ function addImportedListing(listing) {
             </div>
           </form>
         </div>
+        <div class="mt-6">
+          <h4 class="font-semibold text-sm mb-1">Historial de reservas</h4>
+          <ul class="text-xs text-zinc-500 dark:text-zinc-400">
+            <li v-for="b in bookingsStore.bookings.filter(b => b.listingId === editForm.id)" :key="b.id">
+              {{ formatDate(b.startDate) }} → {{ formatDate(b.endDate) }}
+            </li>
+            <li v-if="bookingsStore.bookings.filter(b => b.listingId === editForm.id).length === 0">Sin reservas para este alojamiento.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de error de contraseña -->
+    <div v-if="showPasswordFailModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      <div class="bg-white dark:bg-zinc-800 rounded-lg shadow-xl max-w-md w-full flex flex-col items-center p-6">
+        <img src="https://c.tenor.com/SQBSmoPOLJIAAAAC/mono-riendo.gif" alt="Mono riendo" class="w-48 h-48 object-contain mb-4" />
+        <p class="text-lg font-bold text-center text-zinc-800 dark:text-white mb-2">
+          ¿Otra vez intentando sabotearme la práctica, Unai? Esta vez no 😏
+        </p>
+        <p class="text-center text-zinc-500 dark:text-zinc-300 mb-4">¡Vuelve a intentarlo, pero no te va a salir!</p>
+        <p class="text-center text-primary-600 font-semibold mb-2">Pista: la contraseña está en el README.</p>
+        <button @click="showPasswordFailModal = false" class="mt-2 px-4 py-2 bg-[#FF5A5F] text-white rounded hover:bg-[#FF3A3F]">Cerrar</button>
       </div>
     </div>
   </div>

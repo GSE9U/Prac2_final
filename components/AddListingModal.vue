@@ -23,34 +23,34 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/vue'
-// import { useListingsStore } from '../stores/listings.ts' // <-- Comentado temporalmente
+import { useListingsStore } from '~/stores/useListingsStore'
 
 const props = defineProps<{ open: boolean }>()
 const emit  = defineEmits(['close'])
 
 const name = ref(''), city = ref(''), price = ref<number|null>(null), img = ref(''), url = ref('')
+const store = useListingsStore()
 
 function close() { emit('close') }
 
-function save() {
-  // Comentamos la llamada al store
-  // if (price.value !== null) {
-  //   useListingsStore().add({ name: name.value, city: city.value, price: price.value, img: img.value, url: url.value })
-  // }
-  console.log('Guardar presionado (Store desconectado)', {
-    name: name.value,
-    city: city.value,
-    price: price.value,
-    img: img.value,
-    url: url.value
-  });
-  // Resetear campos después de guardar
+async function save() {
+  if (price.value !== null) {
+    await store.addListing({
+      title: name.value,
+      city: city.value,
+      price: price.value,
+      image: img.value,
+      url: url.value,
+      rating: 5,
+      reviews: '0'
+    })
+  }
   name.value = ''
   city.value = ''
   price.value = null
   img.value = ''
   url.value = ''
-  close() // Cierra el modal
+  close()
 }
 </script>
 
